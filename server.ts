@@ -50,19 +50,6 @@ async function startServer() {
 
     if (!googleSheetUrl) return res.status(500).json({ success: false, message: "Google Sheet URL not configured." });
 
-    // Pre-check: Is the seat already booked?
-    try {
-      const checkRes = await fetch(`${googleSheetUrl}?action=booked-seats&date=${date}&slot=${slot}`);
-      if (checkRes.ok) {
-        const checkData = await checkRes.json();
-        if (checkData.bookedSeats && checkData.bookedSeats.includes(Number(seatId))) {
-          return res.json({ success: false, message: "Sorry, this seat was just booked by someone else. Please select another seat." });
-        }
-      }
-    } catch (e) {
-      console.error("Pre-check failed", e);
-    }
-
     try {
       const response = await fetch(googleSheetUrl, {
         method: "POST",
@@ -79,10 +66,18 @@ async function startServer() {
         }),
         redirect: "follow"
       });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error("Google Sheet Error Response:", text);
+        return res.status(500).json({ success: false, message: "Google Sheet communication error." });
+      }
+
       const result = await response.json();
       res.json(result);
-    } catch (error) {
-      res.status(500).json({ success: false, message: "Booking failed." });
+    } catch (error: any) {
+      console.error("Booking API Error:", error);
+      res.status(500).json({ success: false, message: "Booking failed. Please check your connection or try again later." });
     }
   });
 

@@ -156,6 +156,12 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Server error: ${res.status}`);
+      }
+
       const result = await res.json();
       if (result.success) {
         alert(`Booking Successful! You have reserved Seat #${data.seatId} for ${data.date}.`);
@@ -164,8 +170,9 @@ export default function App() {
       } else {
         alert(result.message || "Booking failed.");
       }
-    } catch (error) {
-      alert("Error connecting to server.");
+    } catch (error: any) {
+      console.error("Booking Error:", error);
+      alert(error.message === "Failed to fetch" ? "Network error. Please check your connection." : (error.message || "Error connecting to server."));
     } finally {
       setIsSubmitting(false);
     }
