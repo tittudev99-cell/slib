@@ -1,25 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
+@import "react-day-picker/dist/style.css";
 
 @theme {
   --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
   
-  --color-primary: #2563eb;
-  --color-primary-dark: #1d4ed8;
+  --color-primary: var(--primary-color, #2563eb);
+  --color-primary-dark: var(--primary-dark-color, #1d4ed8);
   --color-secondary: #10b981;
 }
 
 @layer base {
+  :root {
+    --primary-color: #2563eb;
+    --primary-dark-color: #1d4ed8;
+  }
+
   html {
     scroll-behavior: smooth;
   }
+  
   body {
-    @apply font-sans text-slate-900 bg-white;
+    @apply font-sans text-slate-900 bg-white transition-colors duration-300;
+  }
+
+  .dark body {
+    @apply text-slate-100 bg-slate-950;
   }
 }
 
 .glass-card {
-  @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-white/20 dark:border-slate-800/20 shadow-xl;
 }
 
 .section-padding {

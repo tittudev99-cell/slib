@@ -11,42 +11,138 @@ async function startServer() {
   // API Route for Contact Form
   app.post("/api/contact", async (req, res) => {
     const { name, phone, message } = req.body;
-
-    console.log("New Contact Form Submission:", { name, phone, message });
-
-    // GOOGLE SHEETS INTEGRATION LOGIC
-    // To save to Google Sheets, you can use a Google Apps Script Web App URL.
-    // 1. Create a Google Sheet.
-    // 2. Go to Extensions > Apps Script.
-    // 3. Paste a script that handles doPost(e) and appends data to the sheet.
-    // 4. Deploy as Web App (Anyone has access).
-    // 5. Add the URL to your .env as GOOGLE_SHEET_URL.
-
     const googleSheetUrl = process.env.GOOGLE_SHEET_URL;
 
     if (googleSheetUrl) {
       try {
+        const now = new Date();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+        let hours = now.getHours();
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const formattedDate = `${day}-${month}-${year} ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+
         const response = await fetch(googleSheetUrl, {
           method: "POST",
-          redirect: "follow", // Required for Google Apps Script redirects
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, phone, message, date: new Date().toISOString() }),
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ action: "contact", name, phone, message, date: formattedDate, plan: "Contact Form" }),
+          redirect: "follow"
         });
         
-        if (!response.ok) throw new Error("Failed to save to Google Sheet");
-        
-        return res.json({ success: true, message: "Details saved to Google Sheet successfully!" });
+        if (!response.ok) throw new Error(`Failed to save: ${response.status}`);
+        return res.json({ success: true, message: "Details saved successfully!" });
       } catch (error) {
-        console.error("Google Sheet Error:", error);
         return res.status(500).json({ success: false, message: "Error saving to Google Sheet." });
       }
     }
+    res.json({ success: true, message: "Form received!" });
+  });
 
-    // Fallback if no URL is provided
-    res.json({ 
-      success: true, 
-      message: "Form received! (Note: Set GOOGLE_SHEET_URL in secrets to save to Google Sheets automatically)" 
-    });
+  // API Route for Booking
+  app.post("/api/book", async (req, res) => {
+    const { name, phone, date, plan, slot, seatId } = req.body;
+    const googleSheetUrl = process.env.GOOGLE_SHEET_URL;
+
+    if (!googleSheetUrl) return res.status(500).json({ success: false, message: "Google Sheet URL not configured." });
+
+    // Pre-check: Is the seat already booked?
+    try {
+      const checkRes = await fetch(`${googleSheetUrl}?action=booked-seats&date=${date}&slot=${slot}`);
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData.bookedSeats && checkData.bookedSeats.includes(Number(seatId))) {
+          return res.json({ success: false, message: "Sorry, this seat was just booked by someone else. Please select another seat." });
+        }
+      }
+    } catch (e) {
+      console.error("Pre-check failed", e);
+    }
+
+    try {
+      const response = await fetch(googleSheetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ 
+          action: "book", 
+          name, 
+          phone, 
+          date, 
+          plan, 
+          slot,
+          seatId,
+          message: `Slot: ${slot} | Seat: #${seatId}` 
+        }),
+        redirect: "follow"
+      });
+      const result = await response.json();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Booking failed." });
+    }
+  });
+
+  // API Route to fetch availability
+  app.get("/api/availability", async (req, res) => {
+    const googleSheetUrl = process.env.GOOGLE_SHEET_URL;
+    if (!googleSheetUrl) return res.status(500).json({ success: false, message: "Not configured." });
+
+    try {
+      const response = await fetch(`${googleSheetUrl}?action=getAvailability`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Failed to fetch availability." });
+    }
+  });
+
+  // API Route to fetch booked seats for a specific date and slot
+  app.get("/api/booked-seats", async (req, res) => {
+    const { date, slot } = req.query;
+    const googleSheetUrl = process.env.GOOGLE_SHEET_URL;
+    if (!googleSheetUrl) return res.status(500).json({ success: false, message: "Not configured." });
+
+    try {
+      const response = await fetch(`${googleSheetUrl}?action=getBookedSeats&date=${date}&slot=${slot}`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Failed to fetch booked seats." });
+    }
+  });
+
+  // Admin API to fetch all bookings
+  app.get("/api/admin/bookings", async (req, res) => {
+    const { password } = req.query;
+    if (password !== "admin123") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const googleSheetUrl = process.env.GOOGLE_SHEET_URL;
+    try {
+      const response = await fetch(`${googleSheetUrl}?action=getBookings`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Failed to fetch bookings." });
+    }
+  });
+
+  // Admin API to fetch all contacts
+  app.get("/api/admin/contacts", async (req, res) => {
+    const { password } = req.query;
+    if (password !== "admin123") return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const googleSheetUrl = process.env.GOOGLE_SHEET_URL;
+    try {
+      const response = await fetch(`${googleSheetUrl}?action=getContacts`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      res.status(500).json({ success: false, message: "Failed to fetch contacts." });
+    }
   });
 
   // Vite middleware for development
